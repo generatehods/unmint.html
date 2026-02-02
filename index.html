@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Unmint Tool - Android Dev</title>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; padding: 20px; text-align: center; }
+        button { background: #14F195; border: none; padding: 15px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; width: 100%; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        #status { margin-top: 15px; font-size: 0.9em; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Solana Dev (Android)</h2>
+        <p>Modal Terdeteksi: <b>$16 - $30</b></p>
+        <hr style="border: 0.5px solid #333;">
+        
+        <button id="connectBtn">Hubungkan Wallet</button>
+        <button id="closeAccountBtn" style="display:none; background: #9945FF;">Cek Akun & Ambil SOL</button>
+        
+        <div id="status">Status: Belum Terhubung</div>
+    </div>
+
+    <script>
+        const connectBtn = document.getElementById('connectBtn');
+        const closeAccountBtn = document.getElementById('closeAccountBtn');
+        const statusDiv = document.getElementById('status');
+        let userWallet = null;
+
+        // Fungsi Hubungkan Wallet (Phantom/Solflare)
+        connectBtn.onclick = async () => {
+            const isPhantomInstalled = window.solana && window.solana.isPhantom;
+
+            if (isPhantomInstalled) {
+                try {
+                    const resp = await window.solana.connect();
+                    userWallet = resp.publicKey.toString();
+                    statusDiv.innerText = "Terhubung: " + userWallet.substring(0,6) + "...";
+                    connectBtn.style.display = "none";
+                    closeAccountBtn.style.display = "block";
+                } catch (err) {
+                    statusDiv.innerText = "Gagal terhubung: " + err.message;
+                }
+            } else {
+                alert("Silakan buka file ini di dalam Browser Phantom atau Solflare App!");
+            }
+        };
+
+        // Logika sederhana untuk simulasi Closing Account
+        closeAccountBtn.onclick = async () => {
+            statusDiv.innerText = "Mencari Token Accounts yang bisa ditutup...";
+            
+            // Note: Untuk eksekusi beneran, kita butuh koneksi RPC
+            const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
+            
+            try {
+                const accounts = await connection.getParsedTokenAccountsByOwner(
+                    new solanaWeb3.PublicKey(userWallet),
+                    { programId: new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") }
+                );
+
+                const emptyAccounts = accounts.value.filter(a => a.account.data.parsed.info.tokenAmount.uiAmount === 0);
+                
+                statusDiv.innerText = `Ditemukan ${emptyAccounts.length} akun kosong. Siap klaim ~${(emptyAccounts.length * 0.002).toFixed(3)} SOL!`;
+                
+                if(emptyAccounts.length > 0) {
+                    alert("Langkah berikutnya: Membuat instruksi CloseAccount (Butuh konfirmasi transaksi).");
+                }
+            } catch (err) {
+                statusDiv.innerText = "Error: " + err.message;
+            }
+        };
+    </script>
+</body>
+</html>
+
