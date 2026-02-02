@@ -3,78 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solana Unmint Tool - Android Dev</title>
+    <title>SolRescue - Dana Talangan Unmint</title>
     <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; padding: 20px; text-align: center; }
-        button { background: #14F195; border: none; padding: 15px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; width: 100%; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; border: 1px solid #333; }
-        #status { margin-top: 15px; font-size: 0.9em; color: #aaa; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; text-align: center; }
+        .container { max-width: 400px; margin: auto; background: #1a1a1a; padding: 25px; border-radius: 20px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .btn { background: linear-gradient(45deg, #14F195, #9945FF); border: none; padding: 15px; border-radius: 12px; color: white; font-weight: bold; width: 100%; cursor: pointer; margin-top: 15px; }
+        .info-box { background: #252525; padding: 15px; border-radius: 10px; margin: 15px 0; font-size: 0.9em; border-left: 4px solid #14F195; }
+        #log { font-size: 0.8em; color: #888; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>Solana Dev (Android)</h2>
-        <p>Modal Terdeteksi: <b>$16 - $30</b></p>
-        <hr style="border: 0.5px solid #333;">
-        
-        <button id="connectBtn">Hubungkan Wallet</button>
-        <button id="closeAccountBtn" style="display:none; background: #9945FF;">Cek Akun & Ambil SOL</button>
-        
-        <div id="status">Status: Belum Terhubung</div>
+<div class="container">
+    <h2>SolRescue 🛠️</h2>
+    <p style="font-size: 0.8em;">Saldo 0 SOL? Tetap bisa klaim balik SOL dari token sampah!</p>
+    
+    <div id="walletArea">
+        <button class="btn" id="connectBtn">Hubungkan Wallet</button>
     </div>
 
-    <script>
-        const connectBtn = document.getElementById('connectBtn');
-        const closeAccountBtn = document.getElementById('closeAccountBtn');
-        const statusDiv = document.getElementById('status');
-        let userWallet = null;
+    <div id="actionArea" style="display:none;">
+        <div class="info-box" id="statusBox">Mengecek akun token...</div>
+        <button class="btn" id="rescueBtn">Eksekusi Dana Talangan</button>
+    </div>
 
-        // Fungsi Hubungkan Wallet (Phantom/Solflare)
-        connectBtn.onclick = async () => {
-            const isPhantomInstalled = window.solana && window.solana.isPhantom;
+    <div id="log">Status: Menunggu Wallet</div>
+</div>
 
-            if (isPhantomInstalled) {
-                try {
-                    const resp = await window.solana.connect();
-                    userWallet = resp.publicKey.toString();
-                    statusDiv.innerText = "Terhubung: " + userWallet.substring(0,6) + "...";
-                    connectBtn.style.display = "none";
-                    closeAccountBtn.style.display = "block";
-                } catch (err) {
-                    statusDiv.innerText = "Gagal terhubung: " + err.message;
-                }
-            } else {
-                alert("Silakan buka file ini di dalam Browser Phantom atau Solflare App!");
-            }
-        };
+<script>
+    const solanaWeb3 = window.solanaWeb3;
+    let userWallet = null;
+    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
 
-        // Logika sederhana untuk simulasi Closing Account
-        closeAccountBtn.onclick = async () => {
-            statusDiv.innerText = "Mencari Token Accounts yang bisa ditutup...";
+    // --- KONFIGURASI KAMU ---
+    const ADMIN_PUBKEY = new solanaWeb3.PublicKey("ALAMAT_WALLET_KAMU_DISINI");
+    const FEE_AMBIL = 0.0008; // Kamu ambil 0.0008 SOL per akun (sebagai profit + ganti gas)
+    // ------------------------
+
+    const connectBtn = document.getElementById('connectBtn');
+    const actionArea = document.getElementById('actionArea');
+    const statusBox = document.getElementById('statusBox');
+    const log = document.getElementById('log');
+
+    connectBtn.onclick = async () => {
+        if (window.solana) {
+            const resp = await window.solana.connect();
+            userWallet = resp.publicKey;
+            document.getElementById('walletArea').style.display = 'none';
+            actionArea.style.display = 'block';
+            checkAccounts();
+        } else {
+            alert("Buka di Browser Phantom/Solflare!");
+        }
+    };
+
+    async function checkAccounts() {
+        log.innerText = "Scanning...";
+        const accounts = await connection.getParsedTokenAccountsByOwner(userWallet, {
+            programId: new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+        });
+
+        const emptyOnes = accounts.value.filter(a => a.account.data.parsed.info.tokenAmount.uiAmount === 0);
+        const totalBack = emptyOnes.length * 0.002;
+        
+        statusBox.innerHTML = `
+            <b>${emptyOnes.length} Akun Kosong Ditemukan</b><br>
+            Potensi Balik: ${totalBack.toFixed(4)} SOL<br>
+            <small>Biaya Talangan: ${(emptyOnes.length * FEE_AMBIL).toFixed(4)} SOL</small>
+        `;
+        window.emptyAccounts = emptyOnes;
+    }
+
+    document.getElementById('rescueBtn').onclick = async () => {
+        try {
+            log.innerText = "Menyiapkan Transaksi Talangan...";
             
-            // Note: Untuk eksekusi beneran, kita butuh koneksi RPC
-            const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
+            let transaction = new solanaWeb3.Transaction();
+            transaction.feePayer = ADMIN_PUBKEY; // KAMU yang bayar gasnya
             
-            try {
-                const accounts = await connection.getParsedTokenAccountsByOwner(
-                    new solanaWeb3.PublicKey(userWallet),
-                    { programId: new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") }
+            window.emptyAccounts.forEach(acc => {
+                // 1. Instruksi Tutup Akun
+                transaction.add(
+                    solanaWeb3.Token.createCloseAccountInstruction(
+                        new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+                        acc.pubkey,
+                        userWallet,
+                        userWallet,
+                        []
+                    )
                 );
+                // 2. Instruksi Kirim Profit ke Kamu (Otomatis terpotong dari hasil unmint)
+                transaction.add(
+                    solanaWeb3.SystemProgram.transfer({
+                        fromPubkey: userWallet,
+                        toPubkey: ADMIN_PUBKEY,
+                        lamports: FEE_AMBIL * solanaWeb3.LAMPORTS_PER_SOL,
+                    })
+                );
+            });
 
-                const emptyAccounts = accounts.value.filter(a => a.account.data.parsed.info.tokenAmount.uiAmount === 0);
-                
-                statusDiv.innerText = `Ditemukan ${emptyAccounts.length} akun kosong. Siap klaim ~${(emptyAccounts.length * 0.002).toFixed(3)} SOL!`;
-                
-                if(emptyAccounts.length > 0) {
-                    alert("Langkah berikutnya: Membuat instruksi CloseAccount (Butuh konfirmasi transaksi).");
-                }
-            } catch (err) {
-                statusDiv.innerText = "Error: " + err.message;
-            }
-        };
-    </script>
+            const { blockhash } = await connection.getRecentBlockhash();
+            transaction.recentBlockhash = blockhash;
+
+            log.innerText = "Minta tanda tangan User...";
+            const signed = await window.solana.signTransaction(transaction);
+            
+            log.innerText = "Mengirim ke server talangan...";
+            // CATATAN: Di sini kamu butuh backend untuk signed sebagai FEE_PAYER.
+            // Untuk demo, kita asumsikan user punya sedikit SOL atau gunakan dummy.
+            
+            alert("Sistem talangan siap dikoneksikan ke backend!");
+            
+        } catch (err) {
+            console.error(err);
+            log.innerText = "Error: " + err.message;
+        }
+    };
+</script>
 </body>
 </html>
-
